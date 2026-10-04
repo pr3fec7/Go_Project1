@@ -1,0 +1,28 @@
+{{define "content"}}
+<h2>Добавить трату</h2>
+
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<form method="POST" action="/expenses">
+    <label>
+        Сумма:
+        <input type="number" step="0.01" name="amount" required value="{{.Amount}}">
+    </label>
+
+    <label>
+        Описание:
+        <input type="text" name="description" required value="{{.Description}}">
+    </label>
+
+    <label>
+        Дата:
+        <input type="date" name="date" required value="{{.Date}}">
+    </label>
+
+    <button type="submit">Сохранить</button>
+</form>
+
+<p><a href="/">← Назад к списку</a></p>
+{{end}}
