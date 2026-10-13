@@ -9,6 +9,7 @@
             <th>Сумма</th>
             <th>Описание</th>
             <th>Дата</th>
+            <th>Действия</th>
         </tr>
     </thead>
     <tbody>
@@ -18,6 +19,14 @@
             <td>{{.Amount}}</td>
             <td>{{.Description}}</td>
             <td>{{.Date.Format "2006-01-02"}}</td>
+            <td>
+                <a href="/expenses/edit?id={{.ID}}">Редактировать</a>
+                <form method="POST" action="/expenses/delete" style="display:inline"
+                      onsubmit="return confirm('Удалить трату?')">
+                    <input type="hidden" name="id" value="{{.ID}}">
+                    <button type="submit">Удалить</button>
+                </form>
+            </td>
         </tr>
         {{end}}
     </tbody>

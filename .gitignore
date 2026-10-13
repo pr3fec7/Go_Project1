@@ -1,16 +1,4 @@
-# Бинарники
-expenses.exe
 *.exe
-
-# База данных
 *.db
-
-# Переменные окружения
 .env
-
-# Файлы IDE
-.vscode/
-.idea/
-
-# Отчёты
 docs/*.docx
