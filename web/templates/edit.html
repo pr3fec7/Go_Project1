@@ -15,6 +15,16 @@
     </label>
 
     <label>
+        Категория:
+        <select name="category_id">
+            <option value="">— без категории —</option>
+            {{range .Categories}}
+                <option value="{{.ID}}" {{if eq .ID $.CategoryID}}selected{{end}}>{{.Name}}</option>
+            {{end}}
+        </select>
+    </label>
+
+    <label>
         Дата:
         <input type="date" name="date" required value="{{.Date}}">
     </label>

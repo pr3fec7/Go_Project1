@@ -37,3 +37,24 @@ button {
 .error {
     color: red;
 }
+
+.filter {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: #f5f5f5;
+    border-radius: 6px;
+}
+
+.filter label {
+    margin-bottom: 0;
+}
+
+.filter select,
+.filter input {
+    display: block;
+    margin-top: 0.25rem;
+}

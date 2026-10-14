@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -27,8 +28,9 @@ func main() {
 		log.Fatalf("не удалось применить миграции: %v", err)
 	}
 
-	repo := repository.NewExpenseRepository(db)
-	h := handlers.NewExpenseHandler(repo)
+	expenseRepo := repository.NewExpenseRepository(db)
+	categoryRepo := repository.NewCategoryRepository(db)
+	h := handlers.NewExpenseHandler(expenseRepo, categoryRepo)
 
 	mux := http.NewServeMux()
 
@@ -50,9 +52,39 @@ func main() {
 	}
 }
 
-// applyMigrations читает SQL-файл и выполняет его.
+// applyMigrations последовательно применяет миграции по номерам.
+// Номер применённой хранится в PRAGMA user_version внутри файла БД.
 func applyMigrations(db *sql.DB) error {
-	data, err := os.ReadFile("migrations/001_init.sql")
+	var version int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return err
+	}
+
+	if version < 1 {
+		if err := execFile(db, "migrations/001_init.sql"); err != nil {
+			return fmt.Errorf("миграция 001: %w", err)
+		}
+		if _, err := db.Exec("PRAGMA user_version = 1"); err != nil {
+			return err
+		}
+		version = 1
+	}
+
+	if version < 2 {
+		if err := execFile(db, "migrations/002_categories.sql"); err != nil {
+			return fmt.Errorf("миграция 002: %w", err)
+		}
+		if _, err := db.Exec("PRAGMA user_version = 2"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// execFile читает SQL-файл и выполняет его.
+func execFile(db *sql.DB, path string) error {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
