@@ -1,0 +1,23 @@
+{{define "content"}}
+<h2>Регистрация</h2>
+
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{end}}
+
+<form method="POST" action="/register">
+    <label>
+        Email:
+        <input type="email" name="email" required value="{{.Email}}">
+    </label>
+
+    <label>
+        Пароль (минимум 6 символов):
+        <input type="password" name="password" required minlength="6">
+    </label>
+
+    <button type="submit">Зарегистрироваться</button>
+</form>
+
+<p>Уже есть аккаунт? <a href="/login">Войти</a></p>
+{{end}}

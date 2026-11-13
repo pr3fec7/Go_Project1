@@ -28,19 +28,38 @@ func main() {
 		log.Fatalf("не удалось применить миграции: %v", err)
 	}
 
+	// Репозитории
 	expenseRepo := repository.NewExpenseRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
-	h := handlers.NewExpenseHandler(expenseRepo, categoryRepo)
+	userRepo := repository.NewUserRepository(db)
+	sessionRepo := repository.NewSessionRepository(db)
+
+	// Обработчики
+	expenseHandler := handlers.NewExpenseHandler(expenseRepo, categoryRepo)
+	authHandler := handlers.NewAuthHandler(userRepo, sessionRepo)
+
+	// Middleware
+	authMiddleware := handlers.NewAuthMiddleware(sessionRepo)
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/", h.ListPage)
-	mux.HandleFunc("/expenses/new", h.NewExpensePage)
-	mux.HandleFunc("/expenses", h.CreateExpense)
-	mux.HandleFunc("/expenses/edit", h.EditPage)
-	mux.HandleFunc("/expenses/update", h.UpdateExpense)
-	mux.HandleFunc("/expenses/delete", h.DeleteExpense)
+	// Публичные маршруты (не требуют авторизации)
+	mux.HandleFunc("/register", authHandler.RegisterPage)
+	mux.HandleFunc("/login", authHandler.LoginPage)
+	mux.HandleFunc("/logout", authHandler.Logout)
 
+	// Защищённые маршруты (требуют авторизации)
+	protected := http.NewServeMux()
+	protected.HandleFunc("/", expenseHandler.ListPage)
+	protected.HandleFunc("/expenses/new", expenseHandler.NewExpensePage)
+	protected.HandleFunc("/expenses", expenseHandler.CreateExpense)
+	protected.HandleFunc("/expenses/edit", expenseHandler.EditPage)
+	protected.HandleFunc("/expenses/update", expenseHandler.UpdateExpense)
+	protected.HandleFunc("/expenses/delete", expenseHandler.DeleteExpense)
+
+	mux.Handle("/", authMiddleware.RequireAuth(protected))
+
+	// Статика
 	fs := http.FileServer(http.Dir("web/static"))
 	mux.Handle("/static/", http.StripPrefix("/static/", fs))
 
@@ -52,8 +71,6 @@ func main() {
 	}
 }
 
-// applyMigrations последовательно применяет миграции по номерам.
-// Номер применённой хранится в PRAGMA user_version внутри файла БД.
 func applyMigrations(db *sql.DB) error {
 	var version int
 	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
@@ -77,12 +94,21 @@ func applyMigrations(db *sql.DB) error {
 		if _, err := db.Exec("PRAGMA user_version = 2"); err != nil {
 			return err
 		}
+		version = 2
+	}
+
+	if version < 3 {
+		if err := execFile(db, "migrations/003_users_auth.sql"); err != nil {
+			return fmt.Errorf("миграция 003: %w", err)
+		}
+		if _, err := db.Exec("PRAGMA user_version = 3"); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-// execFile читает SQL-файл и выполняет его.
 func execFile(db *sql.DB, path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {

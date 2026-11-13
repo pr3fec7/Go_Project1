@@ -39,16 +39,21 @@ func NewExpenseHandler(
 	}
 }
 
-// ListPage отображает список трат с учётом фильтров.
 func (h *ExpenseHandler) ListPage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
 
+	userID, ok := GetUserID(r)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	filter := parseFilter(r)
 
-	expenses, err := h.expenses.GetAll(filter)
+	expenses, err := h.expenses.GetAll(userID, filter)
 	if err != nil {
 		log.Printf("GetAll: %v", err)
 		http.Error(w, "Внутренняя ошибка", http.StatusInternalServerError)
@@ -99,6 +104,13 @@ func (h *ExpenseHandler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	userID, ok := GetUserID(r)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -125,7 +137,7 @@ func (h *ExpenseHandler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 		categoryID, _ = strconv.ParseInt(catStr, 10, 64)
 	}
 
-	_, err = h.expenses.Create(&models.Expense{
+	_, err = h.expenses.Create(userID, &models.Expense{
 		Amount:      amount,
 		Description: description,
 		Date:        date,
@@ -141,13 +153,19 @@ func (h *ExpenseHandler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ExpenseHandler) EditPage(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserID(r)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
 
-	exp, err := h.expenses.GetByID(id)
+	exp, err := h.expenses.GetByID(userID, id)
 	if errors.Is(err, repository.ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -185,6 +203,13 @@ func (h *ExpenseHandler) UpdateExpense(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	userID, ok := GetUserID(r)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -217,7 +242,7 @@ func (h *ExpenseHandler) UpdateExpense(w http.ResponseWriter, r *http.Request) {
 		categoryID, _ = strconv.ParseInt(catStr, 10, 64)
 	}
 
-	err = h.expenses.Update(&models.Expense{
+	err = h.expenses.Update(userID, &models.Expense{
 		ID:          id,
 		Amount:      amount,
 		Description: description,
@@ -242,6 +267,13 @@ func (h *ExpenseHandler) DeleteExpense(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	userID, ok := GetUserID(r)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -253,7 +285,7 @@ func (h *ExpenseHandler) DeleteExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.expenses.Delete(id)
+	err = h.expenses.Delete(userID, id)
 	if errors.Is(err, repository.ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -267,7 +299,6 @@ func (h *ExpenseHandler) DeleteExpense(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// parseFilter читает query-параметры category, from, to.
 func parseFilter(r *http.Request) repository.ExpenseFilter {
 	var f repository.ExpenseFilter
 

@@ -9,36 +9,31 @@ import (
 	"expenses/internal/models"
 )
 
-// ErrNotFound возвращается, когда запись не найдена.
 var ErrNotFound = errors.New("expense not found")
 
-// ExpenseFilter — параметры фильтрации списка трат.
-// Нулевые значения означают «фильтр не задан».
 type ExpenseFilter struct {
 	CategoryID int64
 	From       *time.Time
 	To         *time.Time
 }
 
-// ExpenseRepository инкапсулирует все SQL-запросы к таблице expenses.
 type ExpenseRepository struct {
 	db *sql.DB
 }
 
-// NewExpenseRepository создаёт репозиторий.
 func NewExpenseRepository(db *sql.DB) *ExpenseRepository {
 	return &ExpenseRepository{db: db}
 }
 
-// Create вставляет новую трату и возвращает её ID.
-func (r *ExpenseRepository) Create(e *models.Expense) (int64, error) {
+// Create сохраняет трату для конкретного пользователя.
+func (r *ExpenseRepository) Create(userID int64, e *models.Expense) (int64, error) {
 	var categoryID any
 	if e.CategoryID > 0 {
 		categoryID = e.CategoryID
 	}
 	res, err := r.db.Exec(
-		`INSERT INTO expenses (amount, description, date, category_id) VALUES (?, ?, ?, ?)`,
-		e.Amount, e.Description, e.Date.Format("2006-01-02"), categoryID,
+		`INSERT INTO expenses (amount, description, date, category_id, user_id) VALUES (?, ?, ?, ?, ?)`,
+		e.Amount, e.Description, e.Date.Format("2006-01-02"), categoryID, userID,
 	)
 	if err != nil {
 		return 0, err
@@ -46,8 +41,8 @@ func (r *ExpenseRepository) Create(e *models.Expense) (int64, error) {
 	return res.LastInsertId()
 }
 
-// GetAll возвращает траты по фильтру, с названием категории (JOIN).
-func (r *ExpenseRepository) GetAll(f ExpenseFilter) ([]models.Expense, error) {
+// GetAll возвращает только траты конкретного пользователя.
+func (r *ExpenseRepository) GetAll(userID int64, f ExpenseFilter) ([]models.Expense, error) {
 	var sb strings.Builder
 	sb.WriteString(`
 		SELECT e.id, e.amount, e.description, e.date,
@@ -55,10 +50,11 @@ func (r *ExpenseRepository) GetAll(f ExpenseFilter) ([]models.Expense, error) {
 		       COALESCE(c.name, '')
 		FROM expenses e
 		LEFT JOIN categories c ON c.id = e.category_id
+		WHERE e.user_id = ?
 	`)
 
+	args := []any{userID}
 	var conditions []string
-	var args []any
 
 	if f.CategoryID > 0 {
 		conditions = append(conditions, "e.category_id = ?")
@@ -74,10 +70,9 @@ func (r *ExpenseRepository) GetAll(f ExpenseFilter) ([]models.Expense, error) {
 	}
 
 	if len(conditions) > 0 {
-		sb.WriteString(" WHERE ")
+		sb.WriteString(" AND ")
 		sb.WriteString(strings.Join(conditions, " AND "))
 	}
-
 	sb.WriteString(" ORDER BY e.date DESC, e.id DESC")
 
 	rows, err := r.db.Query(sb.String(), args...)
@@ -103,8 +98,8 @@ func (r *ExpenseRepository) GetAll(f ExpenseFilter) ([]models.Expense, error) {
 	return expenses, rows.Err()
 }
 
-// GetByID возвращает трату по ID.
-func (r *ExpenseRepository) GetByID(id int64) (*models.Expense, error) {
+// GetByID ищет трату этого пользователя. Не даёт посмотреть чужую.
+func (r *ExpenseRepository) GetByID(userID, id int64) (*models.Expense, error) {
 	var e models.Expense
 	var dateStr string
 	err := r.db.QueryRow(`
@@ -113,8 +108,8 @@ func (r *ExpenseRepository) GetByID(id int64) (*models.Expense, error) {
 		       COALESCE(c.name, '')
 		FROM expenses e
 		LEFT JOIN categories c ON c.id = e.category_id
-		WHERE e.id = ?
-	`, id).Scan(&e.ID, &e.Amount, &e.Description, &dateStr,
+		WHERE e.id = ? AND e.user_id = ?
+	`, id, userID).Scan(&e.ID, &e.Amount, &e.Description, &dateStr,
 		&e.CategoryID, &e.CategoryName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -129,15 +124,14 @@ func (r *ExpenseRepository) GetByID(id int64) (*models.Expense, error) {
 	return &e, nil
 }
 
-// Update обновляет трату.
-func (r *ExpenseRepository) Update(e *models.Expense) error {
+func (r *ExpenseRepository) Update(userID int64, e *models.Expense) error {
 	var categoryID any
 	if e.CategoryID > 0 {
 		categoryID = e.CategoryID
 	}
 	res, err := r.db.Exec(
-		`UPDATE expenses SET amount = ?, description = ?, date = ?, category_id = ? WHERE id = ?`,
-		e.Amount, e.Description, e.Date.Format("2006-01-02"), categoryID, e.ID,
+		`UPDATE expenses SET amount = ?, description = ?, date = ?, category_id = ? WHERE id = ? AND user_id = ?`,
+		e.Amount, e.Description, e.Date.Format("2006-01-02"), categoryID, e.ID, userID,
 	)
 	if err != nil {
 		return err
@@ -149,9 +143,8 @@ func (r *ExpenseRepository) Update(e *models.Expense) error {
 	return nil
 }
 
-// Delete удаляет трату по ID.
-func (r *ExpenseRepository) Delete(id int64) error {
-	res, err := r.db.Exec(`DELETE FROM expenses WHERE id = ?`, id)
+func (r *ExpenseRepository) Delete(userID, id int64) error {
+	res, err := r.db.Exec(`DELETE FROM expenses WHERE id = ? AND user_id = ?`, id, userID)
 	if err != nil {
 		return err
 	}
